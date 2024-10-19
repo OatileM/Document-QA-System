@@ -1,6 +1,4 @@
-function uploadFile() {
-    const fileInput = document.getElementById('fileInput');
-    const file = fileInput.files[0];
+function uploadFile(file) {
     if (!file) {
         alert('Please select a file');
         return;
@@ -9,24 +7,29 @@ function uploadFile() {
     const formData = new FormData();
     formData.append('file', file);
 
-    fetch('http://localhost:5000/upload', {
+    // Show loading state
+    const uploadStatus = document.getElementById('uploadStatus');
+    uploadStatus.textContent = 'Uploading...';
+
+    fetch('http://127.0.0.1:5000/upload', {
         method: 'POST',
         body: formData,
         credentials: 'include'
     })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            alert(data.message || 'File uploaded successfully');
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error uploading file: ' + error.message);
-        });
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Upload successful:', data);
+        uploadStatus.textContent = data.message || 'File uploaded successfully';
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        uploadStatus.textContent = 'Error uploading file: ' + error.message;
+    });
 }
 
 function askQuestion() {
@@ -36,6 +39,13 @@ function askQuestion() {
         return;
     }
 
+    const askButton = document.getElementById('askButton');
+    const responseElement = document.getElementById('response');
+
+    askButton.disabled = true;
+    askButton.textContent = 'Processing...';
+    responseElement.textContent = 'Thinking...';
+
     fetch('http://127.0.0.1:5000/ask', {
         method: 'POST',
         headers: {
@@ -43,33 +53,43 @@ function askQuestion() {
         },
         body: JSON.stringify({ question: question }),
     })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.error) {
-                throw new Error(data.error);
-            }
-            document.getElementById('response').innerText = data.answer;
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            document.getElementById('response').innerText = 'Error: ' + error.message;
-        });
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(errorData => {
+                throw new Error(`Server error: ${errorData.error || response.statusText}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        responseElement.textContent = data.answer;
+    })
+    .catch(error => {
+        console.error('Error details:', error);
+        responseElement.textContent = 'Error: ' + error.message;
+    })
+    .finally(() => {
+        askButton.disabled = false;
+        askButton.textContent = 'Ask';
+    });
 }
 
 // Add event listeners when the DOM is fully loaded
 document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('fileInput').addEventListener('change', function() {
-        const fileName = this.files[0]?.name;
-        if (fileName) {
-            document.getElementById('fileLabel').textContent = fileName;
+    const fileInput = document.getElementById('fileInput');
+    const fileLabel = document.getElementById('fileLabel');
+    
+    fileInput.addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            // Update the file label with the selected file name
+            fileLabel.textContent = file.name;
+            uploadFile(file);
         }
     });
 
-    document.getElementById('uploadButton').addEventListener('click', uploadFile);
     document.getElementById('askButton').addEventListener('click', askQuestion);
 });
