@@ -1,5 +1,5 @@
 import boto3
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, make_response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
@@ -10,7 +10,7 @@ from langchain.vectorstores import FAISS
 import json
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
 
 # Set up logging
 import logging
@@ -27,7 +27,7 @@ knowledge_base = None
 # Initialize Bedrock client
 bedrock_runtime = boto3.client(
     service_name='bedrock-runtime',
-    region_name='us-east-1'  
+    region_name='us-east-1'  # replace with your preferred region
 )
 
 def allowed_file(filename):
@@ -74,8 +74,16 @@ def upload_file():
         return jsonify({'message': 'File uploaded successfully'}), 200
     return jsonify({'error': 'File type not allowed'}), 400
 
-@app.route('/ask', methods=['POST'])
+
+@app.route('/ask', methods=['POST', 'OPTIONS'])
 def ask_question():
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', 'http://127.0.0.1:5500')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        return response
+
     global knowledge_base
     data = request.json
     question = data.get('question')
@@ -112,5 +120,10 @@ def ask_question():
         logger.error(f"Error processing question: {str(e)}")
         return jsonify({'error': 'An error occurred while processing your question'}), 500
 
+
+@app.route('/test', methods=['GET'])
+def test():
+    return "Flask server is working!"
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='127.0.0.1', port=5000)
