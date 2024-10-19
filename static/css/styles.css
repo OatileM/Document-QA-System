@@ -61,8 +61,17 @@ button:hover {
     background-color: #27ae60;
 }
 
-#uploadButton {
-    margin-left: 10px;
+#uploadStatus {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+#uploadStatus:not(:empty) {
+    background-color: #e8f5e9;
+    border: 1px solid #a5d6a7;
+    color: #1b5e20;
 }
 
 #response {
@@ -85,7 +94,8 @@ button:hover {
         width: 100%;
     }
 
-    #uploadButton {
+    #fileLabel {
+        display: block;
         margin-left: 0;
         margin-top: 10px;
     }

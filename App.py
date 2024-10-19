@@ -12,6 +12,8 @@ import logging
 from botocore.exceptions import ClientError
 from typing import List
 import hashlib
+import traceback
+
 
 app = Flask(__name__, static_folder='static')
 CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
@@ -92,7 +94,8 @@ def process_document(file_path):
         except Exception as e:
             logger.error(f"Error in embedding or knowledge base creation: {str(e)}")
             raise ValueError(f"Error in embedding or knowledge base creation: {str(e)}")
-    
+        logger.error(f"Error in process_document: {str(e)}")
+        raise
     except FileNotFoundError:
         logger.error(f"File not found: {file_path}")
         raise FileNotFoundError(f"The file {file_path} was not found.")
@@ -114,9 +117,11 @@ def home():
 def upload_file():
     global knowledge_base
     if 'file' not in request.files:
+        logger.error("No file part in the request")
         return jsonify({'error': 'No file part'}), 400
     file = request.files['file']
     if file.filename == '':
+        logger.error("No selected file")
         return jsonify({'error': 'No selected file'}), 400
     if file and allowed_file(file.filename):
         try:
@@ -125,10 +130,12 @@ def upload_file():
             file.save(file_path)
             logger.info(f"File saved: {file_path}")
             knowledge_base = process_document(file_path)
+            logger.info(f"Knowledge base created: {type(knowledge_base)}")
             return jsonify({'message': 'File uploaded and processed successfully'}), 200
         except Exception as e:
             logger.error(f"Error processing file: {str(e)}")
             return jsonify({'error': f"Error processing file: {str(e)}"}), 500
+    logger.error("File type not allowed")
     return jsonify({'error': 'File type not allowed'}), 400
 
 @app.route('/ask', methods=['POST', 'OPTIONS'])
@@ -141,15 +148,20 @@ def ask_question():
         return response
 
     global knowledge_base
-    data = request.json
-    question = data.get('question')
-    if not question:
-        return jsonify({'error': 'No question provided'}), 400
-    
-    if knowledge_base is None:
-        return jsonify({'error': 'No document has been uploaded yet'}), 400
-    
     try:
+        data = request.json
+        if not data:
+            raise ValueError("No JSON data received")
+        
+        question = data.get('question')
+        if not question:
+            raise ValueError("No question provided in the request")
+        
+        logger.info(f"Knowledge base state: {'Initialized' if knowledge_base is not None else 'Not initialized'}")
+        
+        if knowledge_base is None:
+            raise ValueError("No document has been uploaded yet")
+        
         docs = knowledge_base.similarity_search(question)
         context = " ".join([doc.page_content for doc in docs])
         
@@ -172,9 +184,13 @@ def ask_question():
         
         logger.info(f"Question answered: {question}")
         return jsonify({'answer': answer}), 200
+    except ValueError as ve:
+        logger.error(f"ValueError in /ask route: {str(ve)}")
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        logger.error(f"Error processing question: {str(e)}")
-        return jsonify({'error': 'An error occurred while processing your question'}), 500
+        logger.error(f"Unexpected error in /ask route: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": "An unexpected error occurred while processing your question"}), 500
 
 @app.route('/test', methods=['GET'])
 def test():
