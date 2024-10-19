@@ -4,9 +4,9 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
 from PyPDF2 import PdfReader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import BedrockEmbeddings
-from langchain.vectorstores import FAISS
+from langchain_text_splitters import CharacterTextSplitter
+from langchain_community.embeddings import BedrockEmbeddings
+from langchain_community.vectorstores import FAISS
 import json
 
 app = Flask(__name__)
@@ -21,14 +21,24 @@ UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
+# Create the uploads folder if it doesn't exist
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+    logger.info(f"Created upload folder: {UPLOAD_FOLDER}")
+
 # Global variable to store the knowledge base
 knowledge_base = None
 
 # Initialize Bedrock client
-bedrock_runtime = boto3.client(
-    service_name='bedrock-runtime',
-    region_name='us-east-1'  # replace with your preferred region
-)
+try:
+    bedrock_runtime = boto3.client(
+        service_name='bedrock-runtime',
+        region_name='us-east-1'
+    )
+except Exception as e:
+    logger.error(f"Failed to initialize Bedrock client: {str(e)}")
+    # Handle the error appropriately
+
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -54,8 +64,9 @@ def process_document(file_path):
     return knowledge_base
 
 @app.route('/')
-def index():
+def home():
     return render_template('index.html')
+
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
