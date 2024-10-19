@@ -1,5 +1,5 @@
 import boto3
-from flask import Flask, request, jsonify, render_template, make_response
+from flask import Flask, request, jsonify, render_template, make_response, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
@@ -13,7 +13,7 @@ from botocore.exceptions import ClientError
 from typing import List
 import hashlib
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
 
 # Set up logging
@@ -100,8 +100,14 @@ def process_document(file_path):
         logger.error(f"Error processing document: {str(e)}")
         raise ValueError(f"Error processing document: {str(e)}")
 
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    app.logger.info(f"Serving static file: {filename}")
+    return send_from_directory(app.static_folder, filename)
+
 @app.route('/')
 def home():
+    app.logger.info("Rendering index.html")
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
