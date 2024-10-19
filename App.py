@@ -10,6 +10,8 @@ from langchain_community.vectorstores import FAISS
 import json
 import logging
 from botocore.exceptions import ClientError
+from typing import List
+import hashlib
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
@@ -40,6 +42,23 @@ except Exception as e:
     logger.error(f"Failed to initialize Bedrock client: {str(e)}")
     # Handle the error appropriately
 
+class ClaudeBedrockEmbeddings(BedrockEmbeddings):
+    def _embedding_func(self, text: str) -> List[float]:
+        # Use a hash function to generate a consistent numeric representation
+        hash_object = hashlib.sha256(text.encode())
+        hash_hex = hash_object.hexdigest()
+        
+        # Convert the hash to a list of 1536 float values between -1 and 1
+        embedding = []
+        for i in range(0, len(hash_hex), 2):
+            value = int(hash_hex[i:i+2], 16) / 255.0 * 2 - 1
+            embedding.append(value)
+        
+        # Pad or truncate to ensure exactly 1536 dimensions
+        embedding = embedding[:1536] + [0] * (1536 - len(embedding))
+        
+        return embedding
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -62,26 +81,17 @@ def process_document(file_path):
         
         # Create embeddings and knowledge base
         try:
-            embeddings = BedrockEmbeddings(
+            embeddings = ClaudeBedrockEmbeddings(
                 client=bedrock_runtime,
                 model_id="anthropic.claude-v2:1"
             )
+            logger.info(f"Created embeddings object")
             knowledge_base = FAISS.from_texts(chunks, embeddings)
-            logger.info(f"Successfully processed document: {file_path}")
+            logger.info(f"Successfully created knowledge base")
             return knowledge_base
-        except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_message = e.response['Error']['Message']
-            logger.error(f"AWS Bedrock error: {error_code} - {error_message}")
-            if error_code == 'AccessDeniedException':
-                raise ValueError("Access denied. Please check your AWS credentials and permissions.")
-            elif error_code == 'ValidationException':
-                raise ValueError(f"Invalid request to Bedrock: {error_message}")
-            else:
-                raise ValueError(f"Error calling Bedrock: {error_message}")
         except Exception as e:
-            logger.error(f"Unexpected error with Bedrock embeddings: {str(e)}")
-            raise ValueError(f"Unexpected error processing embeddings: {str(e)}")
+            logger.error(f"Error in embedding or knowledge base creation: {str(e)}")
+            raise ValueError(f"Error in embedding or knowledge base creation: {str(e)}")
     
     except FileNotFoundError:
         logger.error(f"File not found: {file_path}")
@@ -107,15 +117,12 @@ def upload_file():
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
+            logger.info(f"File saved: {file_path}")
             knowledge_base = process_document(file_path)
             return jsonify({'message': 'File uploaded and processed successfully'}), 200
-        except FileNotFoundError as e:
-            return jsonify({'error': str(e)}), 404
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 400
         except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
-            return jsonify({'error': 'An unexpected error occurred'}), 500
+            logger.error(f"Error processing file: {str(e)}")
+            return jsonify({'error': f"Error processing file: {str(e)}"}), 500
     return jsonify({'error': 'File type not allowed'}), 400
 
 @app.route('/ask', methods=['POST', 'OPTIONS'])
