@@ -25,10 +25,13 @@ function uploadFile(file) {
     .then(data => {
         console.log('Upload successful:', data);
         uploadStatus.textContent = data.message || 'File uploaded successfully';
+        const fileLabel = document.getElementById('fileLabel');
+        fileLabel.textContent = file.name;  
     })
     .catch(error => {
         console.error('Error:', error);
         uploadStatus.textContent = 'Error uploading file: ' + error.message;
+        fileLabel.textContent = 'No file chosen';    
     });
 }
 
@@ -85,6 +88,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const file = event.target.files[0];
         if (file) {
             uploadFile(file);
+            fileLabel.textContent = file.name;
         }
     });
 
