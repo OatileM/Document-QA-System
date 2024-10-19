@@ -25,10 +25,13 @@ function uploadFile(file) {
     .then(data => {
         console.log('Upload successful:', data);
         uploadStatus.textContent = data.message || 'File uploaded successfully';
+        const fileLabel = document.getElementById('fileLabel');
+        fileLabel.textContent = file.name;  
     })
     .catch(error => {
         console.error('Error:', error);
         uploadStatus.textContent = 'Error uploading file: ' + error.message;
+        fileLabel.textContent = 'No file chosen';    
     });
 }
 
@@ -80,14 +83,12 @@ function askQuestion() {
 // Add event listeners when the DOM is fully loaded
 document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('fileInput');
-    const fileLabel = document.getElementById('fileLabel');
     
     fileInput.addEventListener('change', function(event) {
         const file = event.target.files[0];
         if (file) {
-            // Update the file label with the selected file name
-            fileLabel.textContent = file.name;
             uploadFile(file);
+            fileLabel.textContent = file.name;
         }
     });
 
