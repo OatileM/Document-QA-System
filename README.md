@@ -1,20 +1,28 @@
 # Document Q&A Application
 
-## Introduction
+## Overview
 
-The Document Q&A application is a web-based tool that allows users to upload PDF documents and ask questions about their content. It leverages natural language processing and machine learning techniques to process documents, create embeddings, and generate relevant answers to user queries.
+This Document Q&A Application is an AI-powered tool that allows users to upload PDF documents and ask questions about their content. It leverages natural language processing and machine learning techniques to provide relevant answers based on the uploaded document.
 
 ## Features
 
 - PDF document upload and processing
-- Question-answering based on document content
-- Integration with Amazon Bedrock for AI-powered responses
-- Simple and intuitive web interface
+- Question answering based on document content
+- User-friendly web interface
+- Server-side processing using Flask
+- Integration with Amazon Bedrock for AI capabilities
 
-## Technologies Used
+## Tech Stack
 
-- Backend: Python with Flask web framework
-- Frontend: HTML, CSS, and JavaScript
-- AI Services: Amazon Bedrock (Claude v2 model)
-- Vector Database: FAISS for efficient similarity search
-- PDF Processing: PyPDF2 for extracting text from PDF files
+- Backend: Python, Flask
+- Frontend: HTML, JavaScript
+- AI/ML: Amazon Bedrock, LangChain
+- Data Processing: PyPDF2, FAISS
+
+## Prerequisites
+
+- Python 3.7+
+- pip (Python package manager)
+- AWS account with Bedrock access
+- Node.js and npm (optional, for running a local server for the frontend)
+
