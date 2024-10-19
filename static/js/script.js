@@ -80,13 +80,10 @@ function askQuestion() {
 // Add event listeners when the DOM is fully loaded
 document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('fileInput');
-    const fileLabel = document.getElementById('fileLabel');
     
     fileInput.addEventListener('change', function(event) {
         const file = event.target.files[0];
         if (file) {
-            // Update the file label with the selected file name
-            fileLabel.textContent = file.name;
             uploadFile(file);
         }
     });
