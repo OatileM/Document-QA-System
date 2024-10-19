@@ -1,13 +1,13 @@
+import boto3
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
+from langchain.embeddings import BedrockEmbeddings
 from langchain.vectorstores import FAISS
-from langchain.chains.question_answering import load_qa_chain
-from langchain.llms import OpenAI
+import json
 
 app = Flask(__name__)
 CORS(app)
@@ -17,15 +17,18 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Ensure you set your OpenAI API key as an environment variable
-os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
-
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Global variable to store the knowledge base
 knowledge_base = None
+
+# Initialize Bedrock client
+bedrock_runtime = boto3.client(
+    service_name='bedrock-runtime',
+    region_name='us-east-1'  
+)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -45,7 +48,7 @@ def process_document(file_path):
     )
     chunks = text_splitter.split_text(text)
     
-    embeddings = OpenAIEmbeddings()
+    embeddings = BedrockEmbeddings(client=bedrock_runtime)
     knowledge_base = FAISS.from_texts(chunks, embeddings)
     
     return knowledge_base
@@ -84,13 +87,27 @@ def ask_question():
     
     try:
         docs = knowledge_base.similarity_search(question)
+        context = " ".join([doc.page_content for doc in docs])
         
-        llm = OpenAI()
-        chain = load_qa_chain(llm, chain_type="stuff")
-        response = chain.run(input_documents=docs, question=question)
+        prompt = f"Human: Using the following context, answer the question. If the answer is not in the context, say 'I don't have enough information to answer that question.'\n\nContext: {context}\n\nQuestion: {question}\n\nAssistant:"
+        
+        body = json.dumps({
+            "prompt": prompt,
+            "max_tokens_to_sample": 300,
+            "temperature": 0.7,
+            "top_p": 0.9,
+        })
+        
+        response = bedrock_runtime.invoke_model(
+            body=body,
+            modelId="anthropic.claude-v2"  # or another model of your choice
+        )
+        
+        response_body = json.loads(response.get('body').read())
+        answer = response_body.get('completion')
         
         logger.info(f"Question answered: {question}")
-        return jsonify({'answer': response}), 200
+        return jsonify({'answer': answer}), 200
     except Exception as e:
         logger.error(f"Error processing question: {str(e)}")
         return jsonify({'error': 'An error occurred while processing your question'}), 500
