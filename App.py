@@ -8,12 +8,15 @@ from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores import FAISS
 import json
+import logging
+from botocore.exceptions import ClientError
+from typing import List
+import hashlib
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
 
 # Set up logging
-import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -39,34 +42,67 @@ except Exception as e:
     logger.error(f"Failed to initialize Bedrock client: {str(e)}")
     # Handle the error appropriately
 
+class ClaudeBedrockEmbeddings(BedrockEmbeddings):
+    def _embedding_func(self, text: str) -> List[float]:
+        # Use a hash function to generate a consistent numeric representation
+        hash_object = hashlib.sha256(text.encode())
+        hash_hex = hash_object.hexdigest()
+        
+        # Convert the hash to a list of 1536 float values between -1 and 1
+        embedding = []
+        for i in range(0, len(hash_hex), 2):
+            value = int(hash_hex[i:i+2], 16) / 255.0 * 2 - 1
+            embedding.append(value)
+        
+        # Pad or truncate to ensure exactly 1536 dimensions
+        embedding = embedding[:1536] + [0] * (1536 - len(embedding))
+        
+        return embedding
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def process_document(file_path):
-    pdf_reader = PdfReader(file_path)
-    text = ""
-    
-    for page in pdf_reader.pages:
-        text += page.extract_text()
+    try:
+        # Read PDF
+        pdf_reader = PdfReader(file_path)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text()
         
-    text_splitter = CharacterTextSplitter(
-        separator="\n",
-        chunk_size=1000,
-        chunk_overlap=200,
-        length_function=len
-    )
-    chunks = text_splitter.split_text(text)
+        # Split text
+        text_splitter = CharacterTextSplitter(
+            separator="\n",
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len
+        )
+        chunks = text_splitter.split_text(text)
+        
+        # Create embeddings and knowledge base
+        try:
+            embeddings = ClaudeBedrockEmbeddings(
+                client=bedrock_runtime,
+                model_id="anthropic.claude-v2:1"
+            )
+            logger.info(f"Created embeddings object")
+            knowledge_base = FAISS.from_texts(chunks, embeddings)
+            logger.info(f"Successfully created knowledge base")
+            return knowledge_base
+        except Exception as e:
+            logger.error(f"Error in embedding or knowledge base creation: {str(e)}")
+            raise ValueError(f"Error in embedding or knowledge base creation: {str(e)}")
     
-    embeddings = BedrockEmbeddings(client=bedrock_runtime)
-    knowledge_base = FAISS.from_texts(chunks, embeddings)
-    
-    return knowledge_base
+    except FileNotFoundError:
+        logger.error(f"File not found: {file_path}")
+        raise FileNotFoundError(f"The file {file_path} was not found.")
+    except Exception as e:
+        logger.error(f"Error processing document: {str(e)}")
+        raise ValueError(f"Error processing document: {str(e)}")
 
 @app.route('/')
 def home():
     return render_template('index.html')
-
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -77,14 +113,17 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
-        knowledge_base = process_document(file_path)
-        logger.info(f"File {filename} uploaded and processed successfully")
-        return jsonify({'message': 'File uploaded successfully'}), 200
+        try:
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            logger.info(f"File saved: {file_path}")
+            knowledge_base = process_document(file_path)
+            return jsonify({'message': 'File uploaded and processed successfully'}), 200
+        except Exception as e:
+            logger.error(f"Error processing file: {str(e)}")
+            return jsonify({'error': f"Error processing file: {str(e)}"}), 500
     return jsonify({'error': 'File type not allowed'}), 400
-
 
 @app.route('/ask', methods=['POST', 'OPTIONS'])
 def ask_question():
@@ -119,7 +158,7 @@ def ask_question():
         
         response = bedrock_runtime.invoke_model(
             body=body,
-            modelId="anthropic.claude-v2"  # or another model of your choice
+            modelId="anthropic.claude-v2:1"
         )
         
         response_body = json.loads(response.get('body').read())
@@ -130,7 +169,6 @@ def ask_question():
     except Exception as e:
         logger.error(f"Error processing question: {str(e)}")
         return jsonify({'error': 'An error occurred while processing your question'}), 500
-
 
 @app.route('/test', methods=['GET'])
 def test():
