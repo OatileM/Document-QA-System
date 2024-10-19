@@ -5,15 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document Q&A</title>
     <link rel="stylesheet" href="styles.css">
-    
 </head>
 <body>
     <h1>Document Q&A</h1>
-    <input type="file" id="fileInput" accept=".pdf">
-    <button onclick="uploadFile()">Upload</button>
-    <br><br>
-    <input type="text" id="questionInput" placeholder="Ask a question about the document">
-    <button onclick="askQuestion()">Ask</button>
+    <div>
+        <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+        <label for="fileInput" class="file-label">Choose file</label>
+        <span id="fileLabel">No file chosen
+        <button id="uploadButton">Upload</button>
+    </div>
+    <div>
+        <input type="text" id="questionInput" placeholder="Ask a question about the document">
+        <button id="askButton">Ask</button>
+    </div>
     <div id="response"></div>
     <script src="script.js"></script>
 </body>
